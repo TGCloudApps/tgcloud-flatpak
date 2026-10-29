@@ -1,0 +1,52 @@
+name: Publish Flatpak repository
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17,47 * * * *'
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: flatpak-pages
+  cancel-in-progress: false
+jobs:
+  repository:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check published release assets
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 sync.py plan
+      - name: Tools
+        if: steps.plan.outputs.changed == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak ostree gnupg
+      - name: Import bundles and sign repository
+        if: steps.plan.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FLATPAK_GPG_PRIVATE_KEY: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$FLATPAK_GPG_PRIVATE_KEY"
+          export GNUPGHOME="$RUNNER_TEMP/flatpak-gpg"
+          mkdir -m 700 "$GNUPGHOME"
+          trap 'rm -rf "$GNUPGHOME"' EXIT
+          printf '%s' "$FLATPAK_GPG_PRIVATE_KEY" | base64 -d | gpg --batch --import
+          python3 sync.py build
+      - uses: actions/configure-pages@v5
+        if: steps.plan.outputs.changed == 'true'
+      - uses: actions/upload-pages-artifact@v4
+        if: steps.plan.outputs.changed == 'true'
+        with:
+          path: public
+      - uses: actions/deploy-pages@v4
+        if: steps.plan.outputs.changed == 'true'
+        id: deployment
