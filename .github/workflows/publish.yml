@@ -26,8 +26,10 @@ jobs:
       - name: Tools
         if: steps.plan.outputs.changed == 'true'
         run: |
+          sudo add-apt-repository --yes ppa:flatpak/stable
           sudo apt-get update
           sudo apt-get install -y flatpak ostree gnupg
+          dpkg --compare-versions "$(flatpak --version | awk '{print $2}')" ge 1.16
       - name: Import bundles and sign repository
         if: steps.plan.outputs.changed == 'true'
         env:
