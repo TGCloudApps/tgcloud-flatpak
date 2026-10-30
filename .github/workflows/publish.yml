@@ -1,6 +1,18 @@
 name: Publish Flatpak repository
+run-name: ${{ inputs.request_id && format('Flatpak sync {0}', inputs.request_id) || 'Publish Flatpak repository' }}
 on:
   workflow_dispatch:
+    inputs:
+      request_id:
+        description: Correlation ID from application release CI
+        type: string
+      app:
+        description: Application whose release must be deployed
+        type: choice
+        options: ['', tgphotos, tgdrive]
+      tag:
+        description: Minimum release tag expected in the deployment
+        type: string
   schedule:
     - cron: '17,47 * * * *'
 permissions:
@@ -22,6 +34,8 @@ jobs:
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
+          EXPECTED_APP: ${{ inputs.app }}
+          EXPECTED_TAG: ${{ inputs.tag }}
         run: python3 sync.py plan
       - name: Tools
         if: steps.plan.outputs.changed == 'true'

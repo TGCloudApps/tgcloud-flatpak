@@ -13,7 +13,20 @@ if sys.argv[1] == 'plan':
         release = json.loads(gh('api', f'repos/TGCloudApps/{app}/releases/latest'))
         bundles = {asset['name']: asset['id'] for asset in release['assets'] if asset['name'].endswith('.flatpak')}
         expected = {f'{app}-{arch}.flatpak' for arch in ['x86_64', 'aarch64']}
-        versions[app] = {'tag': release['tag_name'], 'bundles': bundles} if set(bundles) == expected else None
+        if set(bundles) != expected:
+            raise SystemExit(f'{app}: incomplete release; preserve the existing repository')
+        versions[app] = {'tag': release['tag_name'], 'bundles': bundles}
+    expected_app, expected_tag = os.environ.get('EXPECTED_APP'), os.environ.get('EXPECTED_TAG')
+    if bool(expected_app) != bool(expected_tag):
+        raise SystemExit('Both app and tag are required for a release-triggered deployment')
+    if expected_app:
+        import re
+        def version(tag):
+            if not re.fullmatch(r'v?\d+\.\d+\.\d+', tag):
+                raise ValueError('Expected a stable semantic version')
+            return tuple(map(int, tag.removeprefix('v').split('.')))
+        if expected_app not in versions or version(versions[expected_app]['tag']) < version(expected_tag):
+            raise SystemExit('Expected app release is not yet publicly available')
     pathlib.Path('versions.json').write_text(json.dumps(versions, sort_keys=True, indent=2) + '\n')
     try:
         with urllib.request.urlopen(URL.removesuffix('flatpak/')+'versions.json', timeout=15) as response:
